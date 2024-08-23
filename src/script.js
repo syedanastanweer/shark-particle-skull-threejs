@@ -63,7 +63,7 @@ controls.autoRotate = true // Enable auto-rotation
 controls.autoRotateSpeed = 1.0 // Adjust the speed of auto-rotation
 /////////////////////////////////////////////////////////////////////////
 ///// LOADING GLB/GLTF MODEL FROM BLENDER
-loader.load('models/gltf/hammerhead Shark (1).glb', function (gltf) {
+loader.load('models/gltf/shark.glb', function (gltf) {
     const model = gltf.scene;
 
     // Compute the bounding box of the model
@@ -98,7 +98,7 @@ function createWireframe(model, center) {
     model.traverse((obj) => {
         if (obj.isMesh) {
             const wireframeGeometry = new THREE.WireframeGeometry(obj.geometry);
-            const wireframeMaterial = new THREE.LineBasicMaterial({ color: 0xffff00 }); // Yellow color for the wireframe
+            const wireframeMaterial = new THREE.LineBasicMaterial({ color: 0x0096FF }); // Yellow color for the wireframe
             const wireframe = new THREE.LineSegments(wireframeGeometry, wireframeMaterial);
 
             // Apply the same transformation and rotation as the original model
