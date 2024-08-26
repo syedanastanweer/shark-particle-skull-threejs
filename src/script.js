@@ -100,14 +100,25 @@ function createWireframeWithHoverEffect(model, center) {
             const geometry = obj.geometry;
             const vertices = geometry.attributes.position.array;
 
-            // Create a buffer geometry for the points
+            // Create a buffer geometry for the points with more vertices
             const pointsGeometry = new THREE.BufferGeometry();
             pointsGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
 
+            // Increase the density by adding the vertices more than once
+            const moreVertices = [];
+            for (let i = 0; i < vertices.length; i += 3) {
+                // Adding the same vertex multiple times for higher density
+                moreVertices.push(vertices[i], vertices[i + 1], vertices[i + 2]);
+                moreVertices.push(vertices[i], vertices[i + 1], vertices[i + 2]);
+            }
+
+            // Set the new, denser set of vertices
+            pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(moreVertices, 3));
+
             // Create a material with small dots
             const pointsMaterial = new THREE.PointsMaterial({
-                color: 0xFFFF00, // Yellow color for the dots
-                size: 0.02, // Size of each dot
+                color: 0x01ADFF, // Yellow color for the dots
+                size: 0.015, // Slightly smaller size for each dot to appear denser
             });
 
             pointsMaterial.onBeforeCompile = function(shader) {
@@ -148,6 +159,7 @@ function createWireframeWithHoverEffect(model, center) {
         uniforms.mousePos.value.set(cursor.x * 10, -cursor.y * 10, 0); // Apply a scaling factor to mouse position
     }, false);
 }
+
 
 /////////////////////////////////////////////////////////////////////////
 //// INTRO CAMERA ANIMATION USING TWEEN
