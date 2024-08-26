@@ -6,6 +6,7 @@ import { TWEEN } from 'three/examples/jsm/libs/tween.module.min.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
+import { MeshSurfaceSampler } from 'three/examples/jsm/math/MeshSurfaceSampler.js'
 /////////////////////////////////////////////////////////////////////////
 //// DRACO LOADER TO LOAD DRACO COMPRESSED MODELS FROM BLENDER
 const dracoLoader = new DRACOLoader()
@@ -85,30 +86,69 @@ loader.load('models/gltf/shark.glb', function (gltf) {
     controls.target.copy(center);
     controls.update();
 
-    // Create a wireframe from the model's geometry
-    createWireframe(model, center);
-
-    // Optionally, hide or remove the original model to display only the wireframe
-    scene.remove(model); // Remove the original model from the scene
+    // Create a wireframe from the model's geometry with hover effect
+    createWireframeWithHoverEffect(model, center);
 });
-/////////////////////////////////////////////////////////////////////////
-///// CREATE WIREFRAME FROM MODEL GEOMETRY
-function createWireframe(model, center) {
+
+
+///// CREATE WIREFRAME WITH HOVER EFFECT FROM MODEL GEOMETRY
+function createWireframeWithHoverEffect(model, center) {
     // Traverse the model to get its geometry and create a wireframe
+    let uniforms = { mousePos: { value: new THREE.Vector3() } };
     model.traverse((obj) => {
         if (obj.isMesh) {
-            const wireframeGeometry = new THREE.WireframeGeometry(obj.geometry);
-            const wireframeMaterial = new THREE.LineBasicMaterial({ color: 0x0096FF }); // Yellow color for the wireframe
-            const wireframe = new THREE.LineSegments(wireframeGeometry, wireframeMaterial);
+            const geometry = obj.geometry;
+            const vertices = geometry.attributes.position.array;
+
+            // Create a buffer geometry for the points
+            const pointsGeometry = new THREE.BufferGeometry();
+            pointsGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+
+            // Create a material with small dots
+            const pointsMaterial = new THREE.PointsMaterial({
+                color: 0xFFFF00, // Yellow color for the dots
+                size: 0.02, // Size of each dot
+            });
+
+            pointsMaterial.onBeforeCompile = function(shader) {
+                shader.uniforms.mousePos = uniforms.mousePos;
+                shader.vertexShader = `
+                  uniform vec3 mousePos;
+                  varying float vNormal;
+                  ${shader.vertexShader}`.replace(
+                  `#include <begin_vertex>`,
+                  `#include <begin_vertex>
+                    vec3 seg = position - mousePos;
+                    float dist = length(seg);
+                    vec3 dir = normalize(seg);
+                    if (dist < 3.0) {
+                      float force = clamp(0.03 / (dist * dist), 0.0, 0.05);
+                      transformed += dir * force;
+                      vNormal = force * 0.1;
+                    }
+                  `
+                );
+            };
+
+            // Create the Points object
+            const points = new THREE.Points(pointsGeometry, pointsMaterial);
 
             // Apply the same transformation and rotation as the original model
-            wireframe.rotation.copy(obj.rotation);
-            wireframe.position.copy(center);
+            points.rotation.copy(obj.rotation);
+            points.position.copy(center);
 
-            scene.add(wireframe);
+            scene.add(points);
         }
     });
+
+    // Add mouse move listener to update the shader with mouse position
+    document.addEventListener('mousemove', (event) => {
+        event.preventDefault();
+        const cursor = { x: event.clientX / window.innerWidth - 0.5, y: event.clientY / window.innerHeight - 0.5 };
+        uniforms.mousePos.value.set(cursor.x * 10, -cursor.y * 10, 0); // Apply a scaling factor to mouse position
+    }, false);
 }
+
 /////////////////////////////////////////////////////////////////////////
 //// INTRO CAMERA ANIMATION USING TWEEN
 function introAnimation() {
@@ -148,9 +188,3 @@ function rendeLoop() {
 }
 rendeLoop();
 /////////////////////////////////////////////////////////////////////////
-//// ON MOUSE MOVE TO GET CAMERA POSITION
-document.addEventListener('mousemove', (event) => {
-    event.preventDefault();
-    const cursor = { x: event.clientX / window.innerWidth - 0.5, y: event.clientY / window.innerHeight - 0.5 };
-    uniforms.mousePos.value.set(cursor.x * 10, -cursor.y * 10, 0); // Apply a scaling factor to mouse position
-}, false);
