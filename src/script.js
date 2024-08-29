@@ -24,11 +24,11 @@ const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x000000) // Ensure background is black
 /////////////////////////////////////////////////////////////////////////
 ///// RENDERER CONFIG
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" }) 
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)) 
-renderer.setSize(window.innerWidth, window.innerHeight) 
-renderer.outputEncoding = THREE.sRGBEncoding 
-container.appendChild(renderer.domElement) 
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" })
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+renderer.setSize(window.innerWidth, window.innerHeight)
+renderer.outputEncoding = THREE.sRGBEncoding
+container.appendChild(renderer.domElement)
 /////////////////////////////////////////////////////////////////////////
 ///// LIGHTING (ADJUST TO AVOID BLOWN OUT MODEL)
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.3) // Soft ambient light
@@ -63,9 +63,19 @@ controls.zoomSpeed = 0.5
 controls.autoRotate = true // Enable auto-rotation
 controls.autoRotateSpeed = 1.0 // Adjust the speed of auto-rotation
 /////////////////////////////////////////////////////////////////////////
+///// VARIABLES TO TRACK ROTATION
+let rotationX = -Math.PI / 2;
+let rotationY = 3.2;
+let rotationZ = Math.PI;
+let modelScale = [0.9, 0.9, 0.96];
+/////////////////////////////////////////////////////////////////////////
 ///// LOADING GLB/GLTF MODEL FROM BLENDER
 loader.load('models/gltf/shark.glb', function (gltf) {
     const model = gltf.scene;
+
+    // Apply initial rotation and scale
+    model.rotation.set(rotationX, rotationY, rotationZ);
+    model.scale.set(modelScale[0], modelScale[1], modelScale[2]);
 
     // Compute the bounding box of the model
     const boundingBox = new THREE.Box3().setFromObject(model);
@@ -88,12 +98,18 @@ loader.load('models/gltf/shark.glb', function (gltf) {
 
     // Create a wireframe from the model's geometry with hover effect
     createWireframeWithHoverEffect(model, center);
+
+    // Hide or remove the original model
+    // Option 1: Hide the model
+    // model.visible = false;
+
+    // Option 2: Remove the model from the scene
+    scene.remove(model);
 });
 
-
-///// CREATE WIREFRAME WITH HOVER EFFECT FROM MODEL GEOMETRY
+/////////////////////////////////////////////////////////////////////////
+//// CREATE WIREFRAME WITH HOVER EFFECT FROM MODEL GEOMETRY
 function createWireframeWithHoverEffect(model, center) {
-    // Traverse the model to get its geometry and create a wireframe
     let uniforms = { mousePos: { value: new THREE.Vector3() } };
     model.traverse((obj) => {
         if (obj.isMesh) {
@@ -104,39 +120,56 @@ function createWireframeWithHoverEffect(model, center) {
             const pointsGeometry = new THREE.BufferGeometry();
             pointsGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
 
-            // Increase the density by adding the vertices more than once
+            // Increase the density by adding the vertices multiple times
             const moreVertices = [];
             for (let i = 0; i < vertices.length; i += 3) {
                 // Adding the same vertex multiple times for higher density
                 moreVertices.push(vertices[i], vertices[i + 1], vertices[i + 2]);
-                moreVertices.push(vertices[i], vertices[i + 1], vertices[i + 2]);
+                moreVertices.push(vertices[i] + 0.001, vertices[i + 1] + 0.001, vertices[i + 2] + 0.001); // Slight offset for density
             }
 
             // Set the new, denser set of vertices
             pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(moreVertices, 3));
 
-            // Create a material with small dots
+            // Create a material with circular points
             const pointsMaterial = new THREE.PointsMaterial({
-                color: 0x01ADFF, // Yellow color for the dots
-                size: 0.015, // Slightly smaller size for each dot to appear denser
+                color: 0x01ADFF, // Blue color for the dots
+                size: 0.050, // Adjust the size as needed
+                sizeAttenuation: true, // Size attenuates with distance
             });
 
-            pointsMaterial.onBeforeCompile = function(shader) {
+            // Modify the shader to create circular points
+            pointsMaterial.onBeforeCompile = function (shader) {
                 shader.uniforms.mousePos = uniforms.mousePos;
+
+                // Adding the custom shader code
                 shader.vertexShader = `
-                  uniform vec3 mousePos;
-                  varying float vNormal;
-                  ${shader.vertexShader}`.replace(
+                uniform vec3 mousePos;
+                varying float vNormal;
+                ${shader.vertexShader}`.replace(
                   `#include <begin_vertex>`,
                   `#include <begin_vertex>
-                    vec3 seg = position - mousePos;
-                    float dist = length(seg);
-                    vec3 dir = normalize(seg);
-                    if (dist < 3.0) {
-                      float force = clamp(0.03 / (dist * dist), 0.0, 0.05);
-                      transformed += dir * force;
-                      vNormal = force * 0.1;
-                    }
+                  vec3 transformedPos = (modelMatrix * vec4(position, 1.0)).xyz;
+                  vec3 seg = transformedPos - mousePos;
+                  float dist = length(seg);
+                  vec3 dir = normalize(seg);
+                  if (dist < 3.0) {
+                    float force = clamp(0.03 / (dist * dist), 0.0, 0.05);
+                    transformed += dir * force;
+                    vNormal = force * 0.1;
+                  }
+                `
+              );
+              
+
+                // Fragment shader code to create circular points
+                shader.fragmentShader = `
+                  varying float vNormal;
+                  ${shader.fragmentShader}`.replace(
+                    `#include <clipping_planes_fragment>`,
+                    `#include <clipping_planes_fragment>
+                    float r = length(gl_PointCoord - vec2(0.5));
+                    if (r > 0.5) discard;
                   `
                 );
             };
@@ -145,7 +178,8 @@ function createWireframeWithHoverEffect(model, center) {
             const points = new THREE.Points(pointsGeometry, pointsMaterial);
 
             // Apply the same transformation and rotation as the original model
-            points.rotation.copy(obj.rotation);
+            points.rotation.copy(model.rotation);
+            points.scale.copy(model.scale);
             points.position.copy(center);
 
             scene.add(points);
@@ -153,13 +187,31 @@ function createWireframeWithHoverEffect(model, center) {
     });
 
     // Add mouse move listener to update the shader with mouse position
-    document.addEventListener('mousemove', (event) => {
-        event.preventDefault();
-        const cursor = { x: event.clientX / window.innerWidth - 0.5, y: event.clientY / window.innerHeight - 0.5 };
-        uniforms.mousePos.value.set(cursor.x * 10, -cursor.y * 10, 0); // Apply a scaling factor to mouse position
-    }, false);
-}
+document.addEventListener('mousemove', (event) => {
+    event.preventDefault();
 
+    // Calculate normalized device coordinates (NDC)
+    const cursor = new THREE.Vector2(
+        (event.clientX / window.innerWidth) * 2 - 1,
+        -(event.clientY / window.innerHeight) * 2 + 1
+    );
+
+    // Convert NDC to 3D coordinates in world space
+    const vector = new THREE.Vector3(cursor.x, cursor.y, 0.5).unproject(camera);
+
+    // Calculate direction vector from camera to mouse position
+    const direction = vector.sub(camera.position).normalize();
+
+    // Calculate distance from camera to the model's center
+    const distance = controls.target.distanceTo(camera.position);
+
+    // Calculate the position in world space where the mouse is pointing
+    const mousePos = camera.position.clone().add(direction.multiplyScalar(distance));
+
+    uniforms.mousePos.value.set(mousePos.x, mousePos.y, mousePos.z);
+}, false);
+
+}
 
 /////////////////////////////////////////////////////////////////////////
 //// INTRO CAMERA ANIMATION USING TWEEN
@@ -191,10 +243,25 @@ function setOrbitControlsLimits() {
     controls.zoomSpeed = 0.5;
 }
 /////////////////////////////////////////////////////////////////////////
+//// UPDATE ROTATION BASED ON INPUT
+function updateRotation(x, y, z) {
+    rotationX = x;
+    rotationY = y;
+    rotationZ = z;
+}
+
+/////////////////////////////////////////////////////////////////////////
 //// RENDER LOOP FUNCTION
 function rendeLoop() {
     TWEEN.update();
     controls.update();
+
+    // Apply rotation to the wireframe (model has been removed or hidden)
+    if (scene.children.length > 1) {
+        const wireframe = scene.children[scene.children.length - 1]; // Assuming the wireframe is the last added object
+        wireframe.rotation.set(rotationX, rotationY, rotationZ);
+    }
+
     renderer.render(scene, camera);
     requestAnimationFrame(rendeLoop);
 }
