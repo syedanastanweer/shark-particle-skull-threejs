@@ -67,7 +67,7 @@ controls.autoRotateSpeed = 1.0 // Adjust the speed of auto-rotation
 let rotationX = -Math.PI / 2;
 let rotationY = 3.2;
 let rotationZ = Math.PI;
-let modelScale = [0.9, 0.9, 0.96];
+let modelScale = [0.5, 0.5, 0.5];
 /////////////////////////////////////////////////////////////////////////
 ///// LOADING GLB/GLTF MODEL FROM BLENDER
 loader.load('models/gltf/shark.glb', function (gltf) {
@@ -134,7 +134,7 @@ function createWireframeWithHoverEffect(model, center) {
             // Create a material with circular points
             const pointsMaterial = new THREE.PointsMaterial({
                 color: 0x01ADFF, // Blue color for the dots
-                size: 0.050, // Adjust the size as needed
+                size: 0.020, // Adjust the size as needed
                 sizeAttenuation: true, // Size attenuates with distance
             });
 
