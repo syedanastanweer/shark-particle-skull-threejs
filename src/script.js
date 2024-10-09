@@ -67,7 +67,7 @@ controls.autoRotateSpeed = 1.0 // Adjust the speed of auto-rotation
 let rotationX = -Math.PI / 2;
 let rotationY = 3.2;
 let rotationZ = Math.PI;
-let modelScale = [0.5, 0.5, 0.5];
+let modelScale = [1, 1, 1];
 /////////////////////////////////////////////////////////////////////////
 ///// LOADING GLB/GLTF MODEL FROM BLENDER
 loader.load('models/gltf/shark.glb', function (gltf) {
